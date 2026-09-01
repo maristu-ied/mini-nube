@@ -1,0 +1,15 @@
+[project]
+name = "mini-nube"
+version = "0.1.0"
+description = "Sistema de almacenamiento local para datos de plantas solares (NCU/HSU/TCU)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

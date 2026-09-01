@@ -11,7 +11,7 @@ def _ts(s: str) -> int:
     """Helper: convierte 'YYYY-MM-DD HH:MM:SS' UTC a Unix epoch."""
     return timegm(strptime(s, "%Y-%m-%d %H:%M:%S"))
 
-from mini_nube.ingesta import (
+from database.ingesta import (
     ingestar_event_log,
     ingestar_hsu,
     ingestar_ncu,

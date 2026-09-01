@@ -1,6 +1,6 @@
 """Tests del esquema de base de datos."""
 
-from mini_nube.db import conectar, inicializar, obtener_o_crear_dispositivo
+from database.db import conectar, inicializar, obtener_o_crear_dispositivo
 
 
 def test_crear_tablas(db):

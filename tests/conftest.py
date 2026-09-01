@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from mini_nube.db import conectar, inicializar
+from database.db import conectar, inicializar
 
 DATA_DIR = Path(__file__).parent / "data"
 NCU_ID = "NCU_TEST_001"

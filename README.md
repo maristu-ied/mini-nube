@@ -5,7 +5,7 @@ Sistema de almacenamiento local para datos de plantas solares. Ingesta datos CSV
 ## Estructura
 
 ```
-mini_nube/
+database/
   __init__.py
   schema.py      # Definición de tablas e índices
   db.py          # Conexión e inicialización de la BD
@@ -38,8 +38,8 @@ uv run pytest -v
 ## Uso básico
 
 ```python
-from mini_nube.db import conectar, inicializar
-from mini_nube.ingesta import (
+from database.db import conectar, inicializar
+from database.ingesta import (
     ingestar_ncu,
     ingestar_ncu_sensor,
     ingestar_hsu,

@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from mini_nube.db import conectar, inicializar
-from mini_nube.ingesta import (
+from database.db import conectar, inicializar
+from database.ingesta import (
     ingestar_ncu,
     ingestar_ncu_sensor,
     ingestar_hsu,

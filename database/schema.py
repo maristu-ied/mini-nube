@@ -161,6 +161,8 @@ CREATE TABLE IF NOT EXISTS ingesta_log (
     fichero         TEXT    NOT NULL,
     tipo_datos      TEXT    NOT NULL,
     filas_insertadas INTEGER NOT NULL,
+    filas_nuevas      INTEGER NOT NULL,
+    filas_actualizadas INTEGER NOT NULL,
     timestamp_inicio INTEGER,
     timestamp_fin    INTEGER,
     ingested_at     INTEGER NOT NULL DEFAULT (unixepoch('now'))

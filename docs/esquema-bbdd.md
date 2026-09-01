@@ -107,7 +107,9 @@ Nota: el CSV de origen no tiene cabecera, formato `timestamp;evento`.
 | ncu_id           | TEXT    | NCU de origen                  |
 | fichero          | TEXT    | Nombre del fichero CSV         |
 | tipo_datos       | TEXT    | Tabla destino                  |
-| filas_insertadas | INTEGER | Número de filas insertadas     |
+| filas_insertadas | INTEGER | Total de filas procesadas (nuevas + actualizadas) |
+| filas_nuevas      | INTEGER | Filas insertadas por primera vez |
+| filas_actualizadas | INTEGER | Filas ya existentes reemplazadas |
 | timestamp_inicio | INTEGER | Primer timestamp del fichero (epoch) |
 | timestamp_fin    | INTEGER | Último timestamp del fichero (epoch) |
 | ingested_at      | INTEGER | Momento de la ingesta (epoch UTC)    |

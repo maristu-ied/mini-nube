@@ -35,6 +35,52 @@ def _parse_float(val: str) -> float | None:
 # Ingesta de cada tipo de fichero
 # ---------------------------------------------------------------------------
 
+def ingestar_fichero(conn: sqlite3.Connection, csv_path: str | Path, ncu_id: str) -> None:
+    """Ingesta un único CSV según el prefijo de su nombre."""
+    csv_path = Path(csv_path)
+    nombre = csv_path.name
+
+    # El orden importa: NCU_EVENT_LOG_ y NCU_SENSORS_ deben comprobarse antes que NCU_.
+    if nombre.startswith("NCU_EVENT_LOG_"):
+        ingestar_event_log(conn, csv_path, ncu_id)
+    elif nombre.startswith("NCU_SENSORS_"):
+        ingestar_ncu_sensor(conn, csv_path, ncu_id)
+    elif nombre.startswith("NCU_"):
+        ingestar_ncu(conn, csv_path, ncu_id)
+    elif nombre.startswith("HSU_"):
+        hsu_id = "_".join(nombre.split("_")[:2])
+        ingestar_hsu(conn, csv_path, ncu_id, hsu_id)
+    elif nombre.startswith("TCU_"):
+        tcu_id = "_".join(nombre.split("_")[:2])
+        ingestar_tcu(conn, csv_path, ncu_id, tcu_id)
+
+
+def ingestar_directorio(conn: sqlite3.Connection, plant_folder: str | Path, ncu_id: str, skip_files_already_inserted: bool) -> None:
+    """Escanea plant_folder y sus subcarpetas, ingestando cada CSV según su nombre."""
+    print(f"Escaneando carpeta: {plant_folder}")
+    csv_files = list(Path(plant_folder).rglob("*.csv"))
+
+    print(f"Archivos CSV encontrados: {len(csv_files)}")
+
+    for csv_path in sorted(csv_files):
+        nombre = csv_path.name
+
+        # comprobar si el archivo ya ha sido insertado con el correspondiente ncu_id
+        if skip_files_already_inserted:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) FROM ingesta_log WHERE fichero=? AND ncu_id=?",
+                (nombre, ncu_id),
+            )
+            if cursor.fetchone()[0] > 0:
+                # print(f"Archivo {nombre} ya ha sido insertado para NCU_ID {ncu_id}. Saltando.")
+                continue
+
+        # print(f"Ingestando archivo: {csv_path}")
+
+        ingestar_fichero(conn, csv_path, ncu_id)
+
+
 def ingestar_ncu(
     conn: sqlite3.Connection,
     csv_path: str | Path,
@@ -60,6 +106,9 @@ def ingestar_ncu(
                 _parse_bool(row["bluetooth_enabled"]),
             ))
 
+    ya_existentes = _contar_existentes(conn, "datos_ncu", disp_id, [r[1] for r in rows])
+    nuevos = len(rows) - ya_existentes
+
     conn.executemany(
         """INSERT OR REPLACE INTO datos_ncu
            (dispositivo_id, timestamp, mqtt_online, gw1_online, gw2_online,
@@ -69,8 +118,21 @@ def ingestar_ncu(
     )
     conn.commit()
 
-    _registrar_ingesta(conn, ncu_id, csv_path.name, "datos_ncu", len(rows), rows)
+    _registrar_ingesta(conn, ncu_id, csv_path.name, "datos_ncu", nuevos, ya_existentes, rows)
     return len(rows)
+
+
+def _contar_existentes(conn: sqlite3.Connection, tabla: str, disp_id: int, timestamps: list[int]) -> int:
+    """Cuenta cuántos de los (dispositivo_id, timestamp) dados ya existen en la tabla."""
+    total = 0
+    for i in range(0, len(timestamps), 900):  # límite de parámetros de SQLite
+        chunk = timestamps[i:i + 900]
+        placeholders = ",".join("?" * len(chunk))
+        total += conn.execute(
+            f"SELECT COUNT(*) FROM {tabla} WHERE dispositivo_id = ? AND timestamp IN ({placeholders})",
+            (disp_id, *chunk),
+        ).fetchone()[0]
+    return total
 
 
 def _ingestar_sensor(
@@ -105,6 +167,9 @@ def _ingestar_sensor(
                 _parse_bool(row["snow_sensor_com_error"]),
             ))
 
+    ya_existentes = _contar_existentes(conn, tabla, disp_id, [r[1] for r in rows])
+    nuevos = len(rows) - ya_existentes
+
     conn.executemany(
         f"""INSERT OR REPLACE INTO {tabla}
             (dispositivo_id, timestamp, main_battery, internal_temp,
@@ -115,7 +180,7 @@ def _ingestar_sensor(
     )
     conn.commit()
 
-    _registrar_ingesta(conn, ncu_id, csv_path.name, tabla, len(rows), rows)
+    _registrar_ingesta(conn, ncu_id, csv_path.name, tabla, nuevos, ya_existentes, rows)
     return len(rows)
 
 
@@ -183,6 +248,9 @@ def ingestar_tcu(
                 _parse_int(row["power_section_alarms"]),
             ))
 
+    ya_existentes = _contar_existentes(conn, "datos_tcu", disp_id, [r[1] for r in rows])
+    nuevos = len(rows) - ya_existentes
+
     conn.executemany(
         """INSERT OR REPLACE INTO datos_tcu
            (dispositivo_id, timestamp, main_state, backtracking, wind_from_east,
@@ -196,7 +264,7 @@ def ingestar_tcu(
     )
     conn.commit()
 
-    _registrar_ingesta(conn, ncu_id, csv_path.name, "datos_tcu", len(rows), rows)
+    _registrar_ingesta(conn, ncu_id, csv_path.name, "datos_tcu", nuevos, ya_existentes, rows)
     return len(rows)
 
 
@@ -220,6 +288,16 @@ def ingestar_event_log(
             if len(parts) == 2:
                 rows.append((disp_id, _parse_ts(parts[0]), parts[1]))
 
+    # el evento forma parte de la clave única, no basta con (dispositivo_id, timestamp)
+    ya_existentes = sum(
+        1 for disp_id_r, ts, evento in rows
+        if conn.execute(
+            "SELECT 1 FROM ncu_event_log WHERE dispositivo_id = ? AND timestamp = ? AND evento = ?",
+            (disp_id_r, ts, evento),
+        ).fetchone()
+    )
+    nuevos = len(rows) - ya_existentes
+
     conn.executemany(
         """INSERT OR REPLACE INTO ncu_event_log (dispositivo_id, timestamp, evento)
            VALUES (?, ?, ?)""",
@@ -227,7 +305,7 @@ def ingestar_event_log(
     )
     conn.commit()
 
-    _registrar_ingesta(conn, ncu_id, csv_path.name, "ncu_event_log", len(rows), rows)
+    _registrar_ingesta(conn, ncu_id, csv_path.name, "ncu_event_log", nuevos, ya_existentes, rows)
     return len(rows)
 
 
@@ -236,18 +314,21 @@ def _registrar_ingesta(
     ncu_id: str,
     fichero: str,
     tipo_datos: str,
-    filas: int,
+    filas_nuevas: int,
+    filas_actualizadas: int,
     rows: list,
 ) -> None:
-    """Registra la ingesta en la tabla de log."""
+    """Registra la ingesta en la tabla de log, con el desglose de filas nuevas y actualizadas."""
     # Extraer rango de timestamps
     ts_inicio = rows[0][1] if rows else None
     ts_fin = rows[-1][1] if rows else None
 
     conn.execute(
         """INSERT OR REPLACE INTO ingesta_log
-           (ncu_id, fichero, tipo_datos, filas_insertadas, timestamp_inicio, timestamp_fin)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (ncu_id, fichero, tipo_datos, filas, ts_inicio, ts_fin),
+           (ncu_id, fichero, tipo_datos, filas_insertadas, filas_nuevas, filas_actualizadas,
+            timestamp_inicio, timestamp_fin)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (ncu_id, fichero, tipo_datos, filas_nuevas + filas_actualizadas, filas_nuevas, filas_actualizadas,
+         ts_inicio, ts_fin),
     )
     conn.commit()

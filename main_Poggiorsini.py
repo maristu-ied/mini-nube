@@ -1,73 +1,30 @@
 from pathlib import Path
-
 from database.db import conectar, inicializar
-from database.ingesta import (
-    ingestar_ncu,
-    ingestar_ncu_sensor,
-    ingestar_hsu,
-    ingestar_tcu,
-    ingestar_event_log,
-)
+from database.ingesta import ingestar_directorio, ingestar_fichero
 
 # Definición de constantes
-PLANT_FOLDER = "data/Poggiorsini"
-DB_PATH = f"{PLANT_FOLDER}/Poggiorsini.db"
+DB_PATH = "data/Poggiorsini/Poggiorsini.db"
+REGENERATE_DB = False  # True para borrar y crear la base de datos desde cero
+# REGENERATE_DB = True  # True para borrar y crear la base de datos desde cero
 
 NCU_ID = "PR6-1075-DIMAURO"
 
+PLANT_FOLDER = "data/Poggiorsini/PR6-1075-DIMAURO"
+SKIP_FILES_ALREADY_INSERTED = True
 
-def ingestar_planta(plant_folder: str, ncu_id: str, db_path: str, skip_files_already_inserted: bool, regenerate_db: bool = False) -> None:
-    """Escanea plant_folder y sus subcarpetas, ingestando cada CSV según su nombre."""
-    if regenerate_db:
-        Path(db_path).unlink(missing_ok=True)
-
-    conn = conectar(db_path)
-    inicializar(conn)
-
-    # escanea todos los CSV en plant_folder y subcarpetas
-    print(f"Escaneando carpeta: {plant_folder}")
-    csv_files = list(Path(plant_folder).rglob("*.csv"))
-
-    print(f"Archivos CSV encontrados: {len(csv_files)}")
-
-    # El orden importa: NCU_EVENT_LOG_ y NCU_SENSORS_ deben comprobarse antes que NCU_.
-    for csv_path in sorted(csv_files):
-        nombre = csv_path.name
-
-        # comprobar si el archivo ya ha sido insertado con el correspondiente ncu_id
-        if skip_files_already_inserted:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) FROM ingesta_log WHERE fichero=? AND ncu_id=?",
-                (nombre, ncu_id),
-            )
-            if cursor.fetchone()[0] > 0:
-                # print(f"Archivo {nombre} ya ha sido insertado para NCU_ID {ncu_id}. Saltando.")
-                continue
-
-        # print(f"Ingestando archivo: {csv_path}")
-
-        if nombre.startswith("NCU_EVENT_LOG_"):
-            ingestar_event_log(conn, csv_path, ncu_id)
-        elif nombre.startswith("NCU_SENSORS_"):
-            ingestar_ncu_sensor(conn, csv_path, ncu_id)
-        elif nombre.startswith("NCU_"):
-            ingestar_ncu(conn, csv_path, ncu_id)
-        elif nombre.startswith("HSU_"):
-            hsu_id = "_".join(nombre.split("_")[:2])
-            ingestar_hsu(conn, csv_path, ncu_id, hsu_id)
-        elif nombre.startswith("TCU_"):
-            tcu_id = "_".join(nombre.split("_")[:2])
-            ingestar_tcu(conn, csv_path, ncu_id, tcu_id)
-
-    conn.close()
+SINGLEFILE_PATH = "data/Poggiorsini/PR6-1075-DIMAURO/2026-09-01/TCU_008_2026-09-01.csv"
 
 
-ingestar_planta(PLANT_FOLDER, NCU_ID, DB_PATH, skip_files_already_inserted=True, regenerate_db=False)
+if REGENERATE_DB:
+        Path(DB_PATH).unlink(missing_ok=True)
+
+conn = conectar(DB_PATH)
+inicializar(conn)
+
+# ingestar_directorio(conn, PLANT_FOLDER, NCU_ID, skip_files_already_inserted=SKIP_FILES_ALREADY_INSERTED)
+ingestar_fichero(conn, Path(SINGLEFILE_PATH), NCU_ID)
 
 # Resumen
-# conectar a la bbdd ver las tablas y contar el número de filas de cada tabla
-conn = conectar(DB_PATH)
 cursor = conn.cursor()
 cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
 tablas = cursor.fetchall()

@@ -21,7 +21,7 @@ Una BD SQLite única puede contener datos de múltiples NCUs. El `ncu_id` se pas
 | tipo        | TEXT    | `'NCU'`, `'HSU'` o `'TCU'`    |
 | device_id   | TEXT    | Identificador del dispositivo  |
 | descripcion | TEXT    | Opcional                       |
-| created_at  | TEXT    | ISO-8601 UTC                   |
+| created_at  | INTEGER | Unix epoch (segundos) UTC      |
 
 Restricción: `UNIQUE(ncu_id, tipo, device_id)`
 
@@ -30,7 +30,7 @@ Restricción: `UNIQUE(ncu_id, tipo, device_id)`
 | Columna           | Tipo    | Descripción              |
 |-------------------|---------|--------------------------|
 | dispositivo_id    | INTEGER | FK a dispositivos        |
-| timestamp         | TEXT    | UTC ISO-8601             |
+| timestamp         | INTEGER | Unix epoch (segundos) UTC|
 | mqtt_online       | INTEGER | 0/1                      |
 | gw1_online        | INTEGER | 0/1                      |
 | gw2_online        | INTEGER | 0/1                      |
@@ -44,7 +44,7 @@ Restricción: `UNIQUE(ncu_id, tipo, device_id)`
 | Columna              | Tipo    | Descripción                   |
 |----------------------|---------|-------------------------------|
 | dispositivo_id       | INTEGER | FK a dispositivos             |
-| timestamp            | TEXT    | UTC ISO-8601                  |
+| timestamp            | INTEGER | Unix epoch (segundos) UTC     |
 | main_battery         | INTEGER | Tensión batería (mV)          |
 | internal_temp        | REAL    | Temperatura interna (°C)      |
 | wind_speed           | REAL    | Velocidad viento (m/s)        |
@@ -62,7 +62,7 @@ Restricción: `UNIQUE(ncu_id, tipo, device_id)`
 | Columna                        | Tipo    | Descripción                    |
 |--------------------------------|---------|--------------------------------|
 | dispositivo_id                 | INTEGER | FK a dispositivos              |
-| timestamp                      | TEXT    | UTC ISO-8601                   |
+| timestamp                      | INTEGER | Unix epoch (segundos) UTC      |
 | main_state                     | TEXT    | Estado principal (AUTO, etc.)  |
 | backtracking                   | INTEGER | 0/1                            |
 | wind_from_east                 | INTEGER | 0/1                            |
@@ -95,7 +95,7 @@ Restricción: `UNIQUE(ncu_id, tipo, device_id)`
 | Columna        | Tipo    | Descripción                |
 |----------------|---------|----------------------------|
 | dispositivo_id | INTEGER | FK a dispositivos          |
-| timestamp      | TEXT    | UTC ISO-8601               |
+| timestamp      | INTEGER | Unix epoch (segundos) UTC  |
 | evento         | TEXT    | Texto libre del evento     |
 
 Nota: el CSV de origen no tiene cabecera, formato `timestamp;evento`.
@@ -108,17 +108,17 @@ Nota: el CSV de origen no tiene cabecera, formato `timestamp;evento`.
 | fichero          | TEXT    | Nombre del fichero CSV         |
 | tipo_datos       | TEXT    | Tabla destino                  |
 | filas_insertadas | INTEGER | Número de filas insertadas     |
-| timestamp_inicio | TEXT    | Primer timestamp del fichero   |
-| timestamp_fin    | TEXT    | Último timestamp del fichero   |
-| ingested_at      | TEXT    | Momento de la ingesta (UTC)    |
+| timestamp_inicio | INTEGER | Primer timestamp del fichero (epoch) |
+| timestamp_fin    | INTEGER | Último timestamp del fichero (epoch) |
+| ingested_at      | INTEGER | Momento de la ingesta (epoch UTC)    |
 
 ## Índices
 
-Todas las tablas de datos tienen un índice compuesto `(dispositivo_id, timestamp)` para consultas eficientes por dispositivo y rango temporal.
+Todas las tablas de datos tienen un índice único `(dispositivo_id, timestamp)` para consultas eficientes por dispositivo y rango temporal, y para evitar duplicados en la ingesta. `ncu_event_log` usa `(dispositivo_id, timestamp, evento)` ya que puede haber varios eventos en el mismo timestamp.
 
 ## Decisiones de diseño
 
-- **Timestamps**: almacenados en UTC como TEXT ISO-8601, tal como vienen en los CSV
+- **Timestamps**: almacenados en UTC como INTEGER (Unix epoch, segundos), convertidos desde el formato ISO-8601 de los CSV en la ingesta
 - **WAL mode**: activado para mejor rendimiento en lecturas concurrentes
 - **Foreign keys**: activadas para integridad referencial
 - **Booleanos**: almacenados como INTEGER (0/1)

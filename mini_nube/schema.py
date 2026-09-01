@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS datos_ncu (
 """
 
 SQL_CREATE_IDX_DATOS_NCU = """
-CREATE INDEX IF NOT EXISTS idx_datos_ncu_ts
+CREATE UNIQUE INDEX IF NOT EXISTS idx_datos_ncu_ts
     ON datos_ncu (dispositivo_id, timestamp);
 """
 
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS datos_ncu_sensor (
 """
 
 SQL_CREATE_IDX_DATOS_NCU_SENSOR = """
-CREATE INDEX IF NOT EXISTS idx_datos_ncu_sensor_ts
+CREATE UNIQUE INDEX IF NOT EXISTS idx_datos_ncu_sensor_ts
     ON datos_ncu_sensor (dispositivo_id, timestamp);
 """
 
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS datos_hsu (
 """
 
 SQL_CREATE_IDX_DATOS_HSU = """
-CREATE INDEX IF NOT EXISTS idx_datos_hsu_ts
+CREATE UNIQUE INDEX IF NOT EXISTS idx_datos_hsu_ts
     ON datos_hsu (dispositivo_id, timestamp);
 """
 
@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS datos_tcu (
 """
 
 SQL_CREATE_IDX_DATOS_TCU = """
-CREATE INDEX IF NOT EXISTS idx_datos_tcu_ts
+CREATE UNIQUE INDEX IF NOT EXISTS idx_datos_tcu_ts
     ON datos_tcu (dispositivo_id, timestamp);
 """
 
@@ -148,8 +148,8 @@ CREATE TABLE IF NOT EXISTS ncu_event_log (
 """
 
 SQL_CREATE_IDX_NCU_EVENT_LOG = """
-CREATE INDEX IF NOT EXISTS idx_ncu_event_log_ts
-    ON ncu_event_log (dispositivo_id, timestamp);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ncu_event_log_ts
+    ON ncu_event_log (dispositivo_id, timestamp, evento);
 """
 
 # -- Metadata de ingesta ------------------------------------------------------

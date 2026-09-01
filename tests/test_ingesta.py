@@ -29,7 +29,9 @@ class TestIngestaNcu:
         assert filas > 0
 
         count = db.execute("SELECT COUNT(*) FROM datos_ncu").fetchone()[0]
-        assert count == filas
+        assert count > 0
+        # count puede ser <= filas si el CSV tiene timestamps duplicados
+        assert count <= filas
 
     def test_valores_ncu(self, db):
         ingestar_ncu(db, DATA_DIR / "NCU_20260729.csv", NCU_ID)
@@ -47,7 +49,8 @@ class TestIngestaHsu:
         assert filas > 0
 
         count = db.execute("SELECT COUNT(*) FROM datos_hsu").fetchone()[0]
-        assert count == filas
+        assert count > 0
+        assert count <= filas
 
     def test_valores_hsu(self, db):
         ingestar_hsu(db, DATA_DIR / "HSU_230_20260729.csv", NCU_ID, "HSU_230")
@@ -66,7 +69,8 @@ class TestIngestaNcuSensor:
         assert filas > 0
 
         count = db.execute("SELECT COUNT(*) FROM datos_ncu_sensor").fetchone()[0]
-        assert count == filas
+        assert count > 0
+        assert count <= filas
 
     def test_valores_ncu_sensor(self, db):
         ingestar_ncu_sensor(db, DATA_DIR / "NCU_SENSORS_20260901.csv", NCU_ID)
@@ -83,7 +87,8 @@ class TestIngestaTcu:
         assert filas > 0
 
         count = db.execute("SELECT COUNT(*) FROM datos_tcu").fetchone()[0]
-        assert count == filas
+        assert count > 0
+        assert count <= filas
 
     def test_valores_tcu(self, db):
         ingestar_tcu(db, DATA_DIR / "TCU_001_20260729.csv", NCU_ID, "TCU_001")
@@ -106,7 +111,8 @@ class TestIngestaEventLog:
         assert filas > 0
 
         count = db.execute("SELECT COUNT(*) FROM ncu_event_log").fetchone()[0]
-        assert count == filas
+        assert count > 0
+        assert count <= filas
 
     def test_valores_event_log(self, db):
         ingestar_event_log(db, DATA_DIR / "NCU_EVENT_LOG_20260729.csv", NCU_ID)
@@ -164,3 +170,45 @@ class TestDispositivosCreados:
                 (disp["id"],),
             ).fetchone()[0]
             assert filas > 0
+
+
+class TestIdempotencia:
+    def test_doble_ingesta_ncu_no_duplica(self, db):
+        """Ingestar el mismo fichero NCU dos veces no duplica filas."""
+        ingestar_ncu(db, DATA_DIR / "NCU_20260729.csv", NCU_ID)
+        count1 = db.execute("SELECT COUNT(*) FROM datos_ncu").fetchone()[0]
+
+        ingestar_ncu(db, DATA_DIR / "NCU_20260729.csv", NCU_ID)
+        count2 = db.execute("SELECT COUNT(*) FROM datos_ncu").fetchone()[0]
+
+        assert count1 == count2
+
+    def test_doble_ingesta_hsu_no_duplica(self, db):
+        """Ingestar el mismo fichero HSU dos veces no duplica filas."""
+        ingestar_hsu(db, DATA_DIR / "HSU_230_20260729.csv", NCU_ID, "HSU_230")
+        count1 = db.execute("SELECT COUNT(*) FROM datos_hsu").fetchone()[0]
+
+        ingestar_hsu(db, DATA_DIR / "HSU_230_20260729.csv", NCU_ID, "HSU_230")
+        count2 = db.execute("SELECT COUNT(*) FROM datos_hsu").fetchone()[0]
+
+        assert count1 == count2
+
+    def test_doble_ingesta_tcu_no_duplica(self, db):
+        """Ingestar el mismo fichero TCU dos veces no duplica filas."""
+        ingestar_tcu(db, DATA_DIR / "TCU_001_20260729.csv", NCU_ID, "TCU_001")
+        count1 = db.execute("SELECT COUNT(*) FROM datos_tcu").fetchone()[0]
+
+        ingestar_tcu(db, DATA_DIR / "TCU_001_20260729.csv", NCU_ID, "TCU_001")
+        count2 = db.execute("SELECT COUNT(*) FROM datos_tcu").fetchone()[0]
+
+        assert count1 == count2
+
+    def test_doble_ingesta_event_log_no_duplica(self, db):
+        """Ingestar el mismo fichero EVENT_LOG dos veces no duplica filas."""
+        ingestar_event_log(db, DATA_DIR / "NCU_EVENT_LOG_20260729.csv", NCU_ID)
+        count1 = db.execute("SELECT COUNT(*) FROM ncu_event_log").fetchone()[0]
+
+        ingestar_event_log(db, DATA_DIR / "NCU_EVENT_LOG_20260729.csv", NCU_ID)
+        count2 = db.execute("SELECT COUNT(*) FROM ncu_event_log").fetchone()[0]
+
+        assert count1 == count2

@@ -23,14 +23,14 @@ def test_crear_tablas(db):
     assert esperadas == tablas
 
 
-def test_crear_indices(db):
-    """Verifica que se crean los índices de timestamp."""
-    indices = {
-        row[0]
-        for row in db.execute(
-            "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'"
-        ).fetchall()
-    }
+def test_crear_indices_unique(db):
+    """Verifica que se crean los índices UNIQUE de timestamp."""
+    indices = {}
+    for row in db.execute(
+        "SELECT name, sql FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'"
+    ).fetchall():
+        indices[row[0]] = row[1]
+
     esperados = {
         "idx_datos_ncu_ts",
         "idx_datos_ncu_sensor_ts",
@@ -38,7 +38,11 @@ def test_crear_indices(db):
         "idx_datos_tcu_ts",
         "idx_ncu_event_log_ts",
     }
-    assert esperados == indices
+    assert esperados == set(indices.keys())
+
+    # Todos deben ser UNIQUE
+    for name, sql in indices.items():
+        assert "UNIQUE" in sql, f"{name} debería ser UNIQUE"
 
 
 def test_dispositivo_unico(db):

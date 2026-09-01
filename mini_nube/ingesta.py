@@ -40,7 +40,7 @@ def ingestar_ncu(
     csv_path: str | Path,
     ncu_id: str,
 ) -> int:
-    """Ingesta un fichero NCU (estado general). Devuelve filas insertadas."""
+    """Ingesta un fichero NCU (estado general). Devuelve filas procesadas."""
     csv_path = Path(csv_path)
     disp_id = obtener_o_crear_dispositivo(conn, ncu_id, "NCU", ncu_id)
 
@@ -61,7 +61,7 @@ def ingestar_ncu(
             ))
 
     conn.executemany(
-        """INSERT INTO datos_ncu
+        """INSERT OR REPLACE INTO datos_ncu
            (dispositivo_id, timestamp, mqtt_online, gw1_online, gw2_online,
             ups_power_ok, ups_battery_low, stop_button, bluetooth_enabled)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -106,7 +106,7 @@ def _ingestar_sensor(
             ))
 
     conn.executemany(
-        f"""INSERT INTO {tabla}
+        f"""INSERT OR REPLACE INTO {tabla}
             (dispositivo_id, timestamp, main_battery, internal_temp,
              wind_speed, wind_direction, wind_level, snow_level, irradiance,
              wind_alarm, gusty_wind_alarm, snow_alarm, snow_sensor_com_error)
@@ -184,7 +184,7 @@ def ingestar_tcu(
             ))
 
     conn.executemany(
-        """INSERT INTO datos_tcu
+        """INSERT OR REPLACE INTO datos_tcu
            (dispositivo_id, timestamp, main_state, backtracking, wind_from_east,
             active_security_position, angle, target_angle, soc, remaining_capacity,
             ps_voltage, ps_current, voltage, current, motor_voltage, motor_current,
@@ -221,7 +221,7 @@ def ingestar_event_log(
                 rows.append((disp_id, _parse_ts(parts[0]), parts[1]))
 
     conn.executemany(
-        """INSERT INTO ncu_event_log (dispositivo_id, timestamp, evento)
+        """INSERT OR REPLACE INTO ncu_event_log (dispositivo_id, timestamp, evento)
            VALUES (?, ?, ?)""",
         rows,
     )
@@ -245,7 +245,7 @@ def _registrar_ingesta(
     ts_fin = rows[-1][1] if rows else None
 
     conn.execute(
-        """INSERT INTO ingesta_log
+        """INSERT OR REPLACE INTO ingesta_log
            (ncu_id, fichero, tipo_datos, filas_insertadas, timestamp_inicio, timestamp_fin)
            VALUES (?, ?, ?, ?, ?, ?)""",
         (ncu_id, fichero, tipo_datos, filas, ts_inicio, ts_fin),

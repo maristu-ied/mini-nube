@@ -2,9 +2,16 @@
 
 import csv
 import sqlite3
+from calendar import timegm
 from pathlib import Path
+from time import strptime
 
 from .db import obtener_o_crear_dispositivo
+
+
+def _parse_ts(val: str) -> int:
+    """Convierte 'YYYY-MM-DD HH:MM:SS' (UTC) a Unix epoch (segundos)."""
+    return timegm(strptime(val.strip(), "%Y-%m-%d %H:%M:%S"))
 
 
 def _parse_bool(val: str) -> int:
@@ -43,7 +50,7 @@ def ingestar_ncu(
         for row in reader:
             rows.append((
                 disp_id,
-                row["datetime"],
+                _parse_ts(row["datetime"]),
                 _parse_bool(row["mqtt_online"]),
                 _parse_bool(row["gw1_online"]),
                 _parse_bool(row["gw2_online"]),
@@ -84,7 +91,7 @@ def _ingestar_sensor(
         for row in reader:
             rows.append((
                 disp_id,
-                row["datetime"],
+                _parse_ts(row["datetime"]),
                 _parse_int(row["main_battery"]),
                 _parse_float(row["internal_temp"]),
                 _parse_float(row["wind_speed"]),
@@ -147,7 +154,7 @@ def ingestar_tcu(
         for row in reader:
             rows.append((
                 disp_id,
-                row["datetime"],
+                _parse_ts(row["datetime"]),
                 row["main_state"],
                 _parse_bool(row["backtracking"]),
                 _parse_bool(row["wind_from_east"]),
@@ -211,7 +218,7 @@ def ingestar_event_log(
             # Formato: timestamp;evento (el evento puede contener ";")
             parts = line.split(";", maxsplit=1)
             if len(parts) == 2:
-                rows.append((disp_id, parts[0], parts[1]))
+                rows.append((disp_id, _parse_ts(parts[0]), parts[1]))
 
     conn.executemany(
         """INSERT INTO ncu_event_log (dispositivo_id, timestamp, evento)

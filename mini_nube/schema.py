@@ -14,7 +14,7 @@ Tablas de datos:
     - datos_tcu: telemetría del tracker (ángulo, motor, batería, alarmas)
     - ncu_event_log: eventos con timestamp y texto libre
 
-Todos los timestamps se almacenan en UTC como TEXT ISO-8601.
+Todos los timestamps se almacenan en UTC como INTEGER (Unix epoch, segundos desde 1970-01-01).
 """
 
 # -- Tabla de dispositivos (registro) -----------------------------------------
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS dispositivos (
     tipo            TEXT    NOT NULL CHECK (tipo IN ('NCU', 'HSU', 'TCU')),
     device_id       TEXT    NOT NULL,
     descripcion     TEXT,
-    created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    created_at      INTEGER NOT NULL DEFAULT (unixepoch('now')),
 
     UNIQUE (ncu_id, tipo, device_id)
 );
@@ -38,7 +38,7 @@ SQL_CREATE_DATOS_NCU = """
 CREATE TABLE IF NOT EXISTS datos_ncu (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     dispositivo_id      INTEGER NOT NULL REFERENCES dispositivos(id),
-    timestamp           TEXT    NOT NULL,
+    timestamp           INTEGER NOT NULL,
     mqtt_online         INTEGER NOT NULL,
     gw1_online          INTEGER NOT NULL,
     gw2_online          INTEGER NOT NULL,
@@ -59,7 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_datos_ncu_ts
 _SQL_SENSOR_COLUMNS = """
     id                      INTEGER PRIMARY KEY AUTOINCREMENT,
     dispositivo_id          INTEGER NOT NULL REFERENCES dispositivos(id),
-    timestamp               TEXT    NOT NULL,
+    timestamp               INTEGER NOT NULL,
     main_battery            INTEGER,
     internal_temp           REAL,
     wind_speed              REAL,
@@ -101,7 +101,7 @@ SQL_CREATE_DATOS_TCU = """
 CREATE TABLE IF NOT EXISTS datos_tcu (
     id                              INTEGER PRIMARY KEY AUTOINCREMENT,
     dispositivo_id                  INTEGER NOT NULL REFERENCES dispositivos(id),
-    timestamp                       TEXT    NOT NULL,
+    timestamp                       INTEGER NOT NULL,
     main_state                      TEXT,
     backtracking                    INTEGER NOT NULL,
     wind_from_east                  INTEGER NOT NULL,
@@ -142,7 +142,7 @@ SQL_CREATE_NCU_EVENT_LOG = """
 CREATE TABLE IF NOT EXISTS ncu_event_log (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     dispositivo_id      INTEGER NOT NULL REFERENCES dispositivos(id),
-    timestamp           TEXT    NOT NULL,
+    timestamp           INTEGER NOT NULL,
     evento              TEXT    NOT NULL
 );
 """
@@ -161,9 +161,9 @@ CREATE TABLE IF NOT EXISTS ingesta_log (
     fichero         TEXT    NOT NULL,
     tipo_datos      TEXT    NOT NULL,
     filas_insertadas INTEGER NOT NULL,
-    timestamp_inicio TEXT,
-    timestamp_fin    TEXT,
-    ingested_at     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+    timestamp_inicio INTEGER,
+    timestamp_fin    INTEGER,
+    ingested_at     INTEGER NOT NULL DEFAULT (unixepoch('now'))
 );
 """
 

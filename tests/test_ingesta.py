@@ -1,8 +1,15 @@
 """Tests de ingesta de ficheros CSV reales."""
 
+from calendar import timegm
 from pathlib import Path
+from time import strptime
 
 import pytest
+
+
+def _ts(s: str) -> int:
+    """Helper: convierte 'YYYY-MM-DD HH:MM:SS' UTC a Unix epoch."""
+    return timegm(strptime(s, "%Y-%m-%d %H:%M:%S"))
 
 from mini_nube.ingesta import (
     ingestar_event_log,
@@ -29,7 +36,7 @@ class TestIngestaNcu:
         row = db.execute(
             "SELECT * FROM datos_ncu ORDER BY timestamp LIMIT 1"
         ).fetchone()
-        assert row["timestamp"] == "2026-07-29 00:00:00"
+        assert row["timestamp"] == _ts("2026-07-29 00:00:00")
         assert row["mqtt_online"] == 0  # false -> 0
         assert row["gw1_online"] == 1   # true -> 1
 
@@ -47,7 +54,7 @@ class TestIngestaHsu:
         row = db.execute(
             "SELECT * FROM datos_hsu ORDER BY timestamp LIMIT 1"
         ).fetchone()
-        assert row["timestamp"] == "2026-07-29 00:00:00"
+        assert row["timestamp"] == _ts("2026-07-29 00:00:00")
         assert row["main_battery"] == 14847
         assert row["internal_temp"] == pytest.approx(19.85)
         assert row["wind_alarm"] == 0
@@ -83,7 +90,7 @@ class TestIngestaTcu:
         row = db.execute(
             "SELECT * FROM datos_tcu ORDER BY timestamp LIMIT 1"
         ).fetchone()
-        assert row["timestamp"] == "2026-07-29 00:00:08"
+        assert row["timestamp"] == _ts("2026-07-29 00:00:08")
         assert row["main_state"] == "AUTO"
         assert row["backtracking"] == 0
         assert row["angle"] == pytest.approx(5.20)
@@ -106,7 +113,7 @@ class TestIngestaEventLog:
         row = db.execute(
             "SELECT * FROM ncu_event_log ORDER BY timestamp LIMIT 1"
         ).fetchone()
-        assert row["timestamp"] == "2026-07-29 06:48:27"
+        assert row["timestamp"] == _ts("2026-07-29 06:48:27")
         assert "OTA performed" in row["evento"]
 
 

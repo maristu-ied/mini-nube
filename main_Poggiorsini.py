@@ -42,10 +42,10 @@ def ingestar_planta(plant_folder: str, ncu_id: str, db_path: str, skip_files_alr
                 (nombre, ncu_id),
             )
             if cursor.fetchone()[0] > 0:
-                print(f"Archivo {nombre} ya ha sido insertado para NCU_ID {ncu_id}. Saltando.")
+                # print(f"Archivo {nombre} ya ha sido insertado para NCU_ID {ncu_id}. Saltando.")
                 continue
 
-        print(f"Ingestando archivo: {csv_path}")
+        # print(f"Ingestando archivo: {csv_path}")
 
         if nombre.startswith("NCU_EVENT_LOG_"):
             ingestar_event_log(conn, csv_path, ncu_id)

@@ -3,16 +3,16 @@ from database.db import conectar, inicializar
 from database.ingesta import ingestar_directorio, ingestar_fichero
 
 # Definición de constantes
-DB_PATH = "data/Poggiorsini/Poggiorsini.db"
+DB_PATH = "../data/Poggiorsini/Poggiorsini.db"
 REGENERATE_DB = False  # True para borrar y crear la base de datos desde cero
 # REGENERATE_DB = True  # True para borrar y crear la base de datos desde cero
 
 NCU_ID = "PR6-1075-DIMAURO"
 
-PLANT_FOLDER = "data/Poggiorsini/PR6-1075-DIMAURO"
+PLANT_FOLDER = "../data/Poggiorsini/PR6-1075-DIMAURO"
 SKIP_FILES_ALREADY_INSERTED = True
 
-SINGLEFILE_PATH = "data/Poggiorsini/PR6-1075-DIMAURO/2026-09-01/TCU_008_2026-09-01.csv"
+SINGLEFILE_PATH = "../data/Poggiorsini/PR6-1075-DIMAURO/2026-09-01/TCU_008_2026-09-01.csv"
 
 
 if REGENERATE_DB:

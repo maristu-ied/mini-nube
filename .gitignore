@@ -10,3 +10,6 @@ wheels/
 .venv
 data
 .personalGitignore
+
+# Rust
+target*

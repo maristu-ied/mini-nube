@@ -1,0 +1,15 @@
+[package]
+name = "mini-nube-db"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+mini-nube-csv = { path = "../csv_reader" }
+rusqlite.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,0 +1,27 @@
+[package]
+name = "mini-nube-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "mini-nube"
+path = "src/main.rs"
+
+[[bin]]
+name = "main_ingest_file"
+path = "src/bin/main_ingest_file.rs"
+
+[[bin]]
+name = "main_ingest_folder"
+path = "src/bin/main_ingest_folder.rs"
+
+[[bin]]
+name = "main_resume_db"
+path = "src/bin/main_resume_db.rs"
+
+[dependencies]
+mini-nube-csv = { path = "../csv_reader" }
+mini-nube-db = { path = "../db" }
+clap.workspace = true
+anyhow.workspace = true

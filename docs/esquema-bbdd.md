@@ -113,6 +113,13 @@ Nota: el CSV de origen no tiene cabecera, formato `timestamp;evento`.
 | timestamp_inicio | INTEGER | Primer timestamp del fichero (epoch) |
 | timestamp_fin    | INTEGER | Último timestamp del fichero (epoch) |
 | ingested_at      | INTEGER | Momento de la ingesta (epoch UTC)    |
+| hash             | TEXT    | Hash MD5 del contenido del fichero   |
+
+Antes de ingestar un fichero se calcula su hash MD5 y se compara con el de la última ingesta registrada para ese mismo `ncu_id` + `fichero` + `tipo_datos`:
+- Si coincide, el fichero se omite (no ha cambiado).
+- Si no hay ingesta previa, se ingesta normalmente.
+- Si el hash difiere, se reingesta actualizando (INSERT OR REPLACE) las filas existentes.
+
 
 ## Índices
 

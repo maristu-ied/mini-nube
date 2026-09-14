@@ -147,7 +147,8 @@ CREATE TABLE IF NOT EXISTS ingesta_log (
     filas_actualizadas INTEGER NOT NULL,
     timestamp_inicio INTEGER,
     timestamp_fin    INTEGER,
-    ingested_at     INTEGER NOT NULL DEFAULT (unixepoch('now'))
+    ingested_at     INTEGER NOT NULL DEFAULT (unixepoch('now')),
+    hash            TEXT
 );
 "#;
 
@@ -170,6 +171,18 @@ pub const ALL_CREATE_STATEMENTS: &[&str] = &[
 pub fn inicializar(conn: &Connection) -> Result<(), DbError> {
     for sql in ALL_CREATE_STATEMENTS {
         conn.execute(sql, [])?;
+    }
+    migrar_ingesta_log_hash(conn)?;
+    Ok(())
+}
+
+/// Añade la columna hash a ingesta_log si la tabla ya existía sin ella.
+fn migrar_ingesta_log_hash(conn: &Connection) -> Result<(), DbError> {
+    let tiene_hash: bool = conn
+        .prepare("SELECT 1 FROM pragma_table_info('ingesta_log') WHERE name = 'hash'")?
+        .exists([])?;
+    if !tiene_hash {
+        conn.execute("ALTER TABLE ingesta_log ADD COLUMN hash TEXT", [])?;
     }
     Ok(())
 }

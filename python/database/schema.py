@@ -165,7 +165,8 @@ CREATE TABLE IF NOT EXISTS ingesta_log (
     filas_actualizadas INTEGER NOT NULL,
     timestamp_inicio INTEGER,
     timestamp_fin    INTEGER,
-    ingested_at     INTEGER NOT NULL DEFAULT (unixepoch('now'))
+    ingested_at     INTEGER NOT NULL DEFAULT (unixepoch('now')),
+    hash            TEXT
 );
 """
 

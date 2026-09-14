@@ -98,13 +98,14 @@ pub fn registrar_ingesta(
     filas_actualizadas: usize,
     timestamp_inicio: Option<i64>,
     timestamp_fin: Option<i64>,
+    hash: &str,
 ) -> Result<(), DbError> {
     conn.execute(
         r#"
         INSERT OR REPLACE INTO ingesta_log
            (ncu_id, fichero, tipo_datos, filas_insertadas, filas_nuevas, filas_actualizadas,
-            timestamp_inicio, timestamp_fin)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            timestamp_inicio, timestamp_fin, hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
         params![
             ncu_id,
@@ -115,9 +116,30 @@ pub fn registrar_ingesta(
             filas_actualizadas as i64,
             timestamp_inicio,
             timestamp_fin,
+            hash,
         ],
     )?;
     Ok(())
+}
+
+/// Devuelve el hash de la última ingesta registrada para ese fichero, si existe.
+pub fn obtener_ultimo_hash(
+    conn: &Connection,
+    ncu_id: &str,
+    fichero: &str,
+    tipo_datos: &str,
+) -> Result<Option<String>, DbError> {
+    let mut stmt = conn.prepare_cached(
+        r#"
+        SELECT hash FROM ingesta_log
+        WHERE ncu_id = ? AND fichero = ? AND tipo_datos = ?
+        ORDER BY id DESC LIMIT 1
+        "#,
+    )?;
+    let hash: Option<Option<String>> = stmt
+        .query_row(params![ncu_id, fichero, tipo_datos], |r| r.get(0))
+        .optional()?;
+    Ok(hash.flatten())
 }
 
 /// Información de resumen de una tabla.

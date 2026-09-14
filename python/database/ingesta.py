@@ -1,12 +1,35 @@
 """Ingesta de ficheros CSV en la base de datos."""
 
 import csv
+import hashlib
 import sqlite3
 from calendar import timegm
 from pathlib import Path
 from time import strptime
 
 from .db import obtener_o_crear_dispositivo
+
+
+def _calcular_hash_fichero(csv_path: str | Path) -> str:
+    """Calcula el hash MD5 del contenido del fichero."""
+    md5 = hashlib.md5()
+    with open(csv_path, "rb") as f:
+        for chunk in iter(lambda: f.read(8192), b""):
+            md5.update(chunk)
+    return md5.hexdigest()
+
+
+def _obtener_ultimo_hash(
+    conn: sqlite3.Connection, ncu_id: str, fichero: str, tipo_datos: str
+) -> str | None:
+    """Devuelve el hash de la última ingesta registrada para ese fichero, si existe."""
+    row = conn.execute(
+        """SELECT hash FROM ingesta_log
+           WHERE ncu_id = ? AND fichero = ? AND tipo_datos = ?
+           ORDER BY id DESC LIMIT 1""",
+        (ncu_id, fichero, tipo_datos),
+    ).fetchone()
+    return row["hash"] if row else None
 
 
 def _parse_ts(val: str) -> int:
@@ -35,24 +58,26 @@ def _parse_float(val: str) -> float | None:
 # Ingesta de cada tipo de fichero
 # ---------------------------------------------------------------------------
 
-def ingestar_fichero(conn: sqlite3.Connection, csv_path: str | Path, ncu_id: str) -> None:
+def ingestar_fichero(
+    conn: sqlite3.Connection, csv_path: str | Path, ncu_id: str, forzar: bool = False
+) -> None:
     """Ingesta un único CSV según el prefijo de su nombre."""
     csv_path = Path(csv_path)
     nombre = csv_path.name
 
     # El orden importa: NCU_EVENT_LOG_ y NCU_SENSORS_ deben comprobarse antes que NCU_.
     if nombre.startswith("NCU_EVENT_LOG_"):
-        ingestar_event_log(conn, csv_path, ncu_id)
+        ingestar_event_log(conn, csv_path, ncu_id, forzar)
     elif nombre.startswith("NCU_SENSORS_"):
-        ingestar_ncu_sensor(conn, csv_path, ncu_id)
+        ingestar_ncu_sensor(conn, csv_path, ncu_id, forzar)
     elif nombre.startswith("NCU_"):
-        ingestar_ncu(conn, csv_path, ncu_id)
+        ingestar_ncu(conn, csv_path, ncu_id, forzar)
     elif nombre.startswith("HSU_"):
         hsu_id = "_".join(nombre.split("_")[:2])
-        ingestar_hsu(conn, csv_path, ncu_id, hsu_id)
+        ingestar_hsu(conn, csv_path, ncu_id, hsu_id, forzar)
     elif nombre.startswith("TCU_"):
         tcu_id = "_".join(nombre.split("_")[:2])
-        ingestar_tcu(conn, csv_path, ncu_id, tcu_id)
+        ingestar_tcu(conn, csv_path, ncu_id, tcu_id, forzar)
 
 
 def ingestar_directorio(conn: sqlite3.Connection, plant_folder: str | Path, ncu_id: str, skip_files_already_inserted: bool) -> None:
@@ -63,31 +88,22 @@ def ingestar_directorio(conn: sqlite3.Connection, plant_folder: str | Path, ncu_
     print(f"Archivos CSV encontrados: {len(csv_files)}")
 
     for csv_path in sorted(csv_files):
-        nombre = csv_path.name
-
-        # comprobar si el archivo ya ha sido insertado con el correspondiente ncu_id
-        if skip_files_already_inserted:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) FROM ingesta_log WHERE fichero=? AND ncu_id=?",
-                (nombre, ncu_id),
-            )
-            if cursor.fetchone()[0] > 0:
-                # print(f"Archivo {nombre} ya ha sido insertado para NCU_ID {ncu_id}. Saltando.")
-                continue
-
-        # print(f"Ingestando archivo: {csv_path}")
-
-        ingestar_fichero(conn, csv_path, ncu_id)
+        # el hash del fichero decide si se omite o se reingesta; forzar lo ignora
+        ingestar_fichero(conn, csv_path, ncu_id, forzar=not skip_files_already_inserted)
 
 
 def ingestar_ncu(
     conn: sqlite3.Connection,
     csv_path: str | Path,
     ncu_id: str,
+    forzar: bool = False,
 ) -> int:
     """Ingesta un fichero NCU (estado general). Devuelve filas procesadas."""
     csv_path = Path(csv_path)
+    hash_fichero = _calcular_hash_fichero(csv_path)
+    if not forzar and _obtener_ultimo_hash(conn, ncu_id, csv_path.name, "datos_ncu") == hash_fichero:
+        return 0
+
     disp_id = obtener_o_crear_dispositivo(conn, ncu_id, "NCU", ncu_id)
 
     with open(csv_path, newline="") as f:
@@ -118,7 +134,7 @@ def ingestar_ncu(
     )
     conn.commit()
 
-    _registrar_ingesta(conn, ncu_id, csv_path.name, "datos_ncu", nuevos, ya_existentes, rows)
+    _registrar_ingesta(conn, ncu_id, csv_path.name, "datos_ncu", nuevos, ya_existentes, rows, hash_fichero)
     return len(rows)
 
 
@@ -142,9 +158,14 @@ def _ingestar_sensor(
     tipo: str,
     device_id: str,
     tabla: str,
+    forzar: bool = False,
 ) -> int:
     """Ingesta genérica para datos de sensores (HSU y NCU_SENSOR comparten esquema)."""
     csv_path = Path(csv_path)
+    hash_fichero = _calcular_hash_fichero(csv_path)
+    if not forzar and _obtener_ultimo_hash(conn, ncu_id, csv_path.name, tabla) == hash_fichero:
+        return 0
+
     disp_id = obtener_o_crear_dispositivo(conn, ncu_id, tipo, device_id)
 
     with open(csv_path, newline="") as f:
@@ -180,7 +201,7 @@ def _ingestar_sensor(
     )
     conn.commit()
 
-    _registrar_ingesta(conn, ncu_id, csv_path.name, tabla, nuevos, ya_existentes, rows)
+    _registrar_ingesta(conn, ncu_id, csv_path.name, tabla, nuevos, ya_existentes, rows, hash_fichero)
     return len(rows)
 
 
@@ -189,18 +210,20 @@ def ingestar_hsu(
     csv_path: str | Path,
     ncu_id: str,
     hsu_id: str,
+    forzar: bool = False,
 ) -> int:
     """Ingesta un fichero HSU. Devuelve filas insertadas."""
-    return _ingestar_sensor(conn, csv_path, ncu_id, "HSU", hsu_id, "datos_hsu")
+    return _ingestar_sensor(conn, csv_path, ncu_id, "HSU", hsu_id, "datos_hsu", forzar)
 
 
 def ingestar_ncu_sensor(
     conn: sqlite3.Connection,
     csv_path: str | Path,
     ncu_id: str,
+    forzar: bool = False,
 ) -> int:
     """Ingesta un fichero NCU_SENSORS. Devuelve filas insertadas."""
-    return _ingestar_sensor(conn, csv_path, ncu_id, "NCU", ncu_id, "datos_ncu_sensor")
+    return _ingestar_sensor(conn, csv_path, ncu_id, "NCU", ncu_id, "datos_ncu_sensor", forzar)
 
 
 def ingestar_tcu(
@@ -208,9 +231,14 @@ def ingestar_tcu(
     csv_path: str | Path,
     ncu_id: str,
     tcu_id: str,
+    forzar: bool = False,
 ) -> int:
     """Ingesta un fichero TCU. Devuelve filas insertadas."""
     csv_path = Path(csv_path)
+    hash_fichero = _calcular_hash_fichero(csv_path)
+    if not forzar and _obtener_ultimo_hash(conn, ncu_id, csv_path.name, "datos_tcu") == hash_fichero:
+        return 0
+
     disp_id = obtener_o_crear_dispositivo(conn, ncu_id, "TCU", tcu_id)
 
     with open(csv_path, newline="") as f:
@@ -264,7 +292,7 @@ def ingestar_tcu(
     )
     conn.commit()
 
-    _registrar_ingesta(conn, ncu_id, csv_path.name, "datos_tcu", nuevos, ya_existentes, rows)
+    _registrar_ingesta(conn, ncu_id, csv_path.name, "datos_tcu", nuevos, ya_existentes, rows, hash_fichero)
     return len(rows)
 
 
@@ -272,9 +300,14 @@ def ingestar_event_log(
     conn: sqlite3.Connection,
     csv_path: str | Path,
     ncu_id: str,
+    forzar: bool = False,
 ) -> int:
     """Ingesta un fichero NCU_EVENT_LOG (sin cabecera). Devuelve filas insertadas."""
     csv_path = Path(csv_path)
+    hash_fichero = _calcular_hash_fichero(csv_path)
+    if not forzar and _obtener_ultimo_hash(conn, ncu_id, csv_path.name, "ncu_event_log") == hash_fichero:
+        return 0
+
     disp_id = obtener_o_crear_dispositivo(conn, ncu_id, "NCU", ncu_id)
 
     rows = []
@@ -305,7 +338,7 @@ def ingestar_event_log(
     )
     conn.commit()
 
-    _registrar_ingesta(conn, ncu_id, csv_path.name, "ncu_event_log", nuevos, ya_existentes, rows)
+    _registrar_ingesta(conn, ncu_id, csv_path.name, "ncu_event_log", nuevos, ya_existentes, rows, hash_fichero)
     return len(rows)
 
 
@@ -317,6 +350,7 @@ def _registrar_ingesta(
     filas_nuevas: int,
     filas_actualizadas: int,
     rows: list,
+    hash_fichero: str,
 ) -> None:
     """Registra la ingesta en la tabla de log, con el desglose de filas nuevas y actualizadas."""
     # Extraer rango de timestamps
@@ -326,9 +360,9 @@ def _registrar_ingesta(
     conn.execute(
         """INSERT OR REPLACE INTO ingesta_log
            (ncu_id, fichero, tipo_datos, filas_insertadas, filas_nuevas, filas_actualizadas,
-            timestamp_inicio, timestamp_fin)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            timestamp_inicio, timestamp_fin, hash)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (ncu_id, fichero, tipo_datos, filas_nuevas + filas_actualizadas, filas_nuevas, filas_actualizadas,
-         ts_inicio, ts_fin),
+         ts_inicio, ts_fin, hash_fichero),
     )
     conn.commit()

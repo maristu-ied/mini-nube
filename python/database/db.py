@@ -19,7 +19,15 @@ def inicializar(conn: sqlite3.Connection) -> None:
     """Crea todas las tablas e índices si no existen."""
     for sql in ALL_CREATE_STATEMENTS:
         conn.execute(sql)
+    _migrar_ingesta_log_hash(conn)
     conn.commit()
+
+
+def _migrar_ingesta_log_hash(conn: sqlite3.Connection) -> None:
+    """Añade la columna hash a ingesta_log si la tabla ya existía sin ella."""
+    columnas = {row["name"] for row in conn.execute("PRAGMA table_info(ingesta_log)")}
+    if "hash" not in columnas:
+        conn.execute("ALTER TABLE ingesta_log ADD COLUMN hash TEXT")
 
 
 def obtener_o_crear_dispositivo(

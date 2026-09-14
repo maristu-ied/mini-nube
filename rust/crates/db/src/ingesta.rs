@@ -8,14 +8,30 @@ use mini_nube_csv::{
 
 use crate::error::DbError;
 use crate::repository::{
-    contar_eventos_existentes, contar_existentes, obtener_o_crear_dispositivo, registrar_ingesta,
+    contar_eventos_existentes, contar_existentes, obtener_o_crear_dispositivo,
+    obtener_ultimo_hash, registrar_ingesta,
 };
+
+/// Calcula el hash MD5 del contenido del fichero.
+fn calcular_hash_fichero(path: &Path) -> Result<String, DbError> {
+    let contenido = std::fs::read(path)?;
+    Ok(format!("{:x}", md5::compute(contenido)))
+}
 
 /// Ingesta un único fichero CSV según su prefijo.
 pub fn ingestar_fichero(
     conn: &mut Connection,
     csv_path: impl AsRef<Path>,
     ncu_id: &str,
+) -> Result<usize, DbError> {
+    ingestar_fichero_interno(conn, csv_path, ncu_id, false)
+}
+
+fn ingestar_fichero_interno(
+    conn: &mut Connection,
+    csv_path: impl AsRef<Path>,
+    ncu_id: &str,
+    forzar: bool,
 ) -> Result<usize, DbError> {
     let path = csv_path.as_ref();
     let filename = path
@@ -29,11 +45,11 @@ pub fn ingestar_fichero(
     };
 
     match file_type {
-        CsvFileType::NcuEventLog => ingestar_event_log(conn, path, ncu_id),
-        CsvFileType::NcuSensors => ingestar_ncu_sensor(conn, path, ncu_id),
-        CsvFileType::Ncu => ingestar_ncu(conn, path, ncu_id),
-        CsvFileType::Hsu { hsu_id } => ingestar_hsu(conn, path, ncu_id, &hsu_id),
-        CsvFileType::Tcu { tcu_id } => ingestar_tcu(conn, path, ncu_id, &tcu_id),
+        CsvFileType::NcuEventLog => ingestar_event_log_interno(conn, path, ncu_id, forzar),
+        CsvFileType::NcuSensors => ingestar_ncu_sensor_interno(conn, path, ncu_id, forzar),
+        CsvFileType::Ncu => ingestar_ncu_interno(conn, path, ncu_id, forzar),
+        CsvFileType::Hsu { hsu_id } => ingestar_hsu_interno(conn, path, ncu_id, &hsu_id, forzar),
+        CsvFileType::Tcu { tcu_id } => ingestar_tcu_interno(conn, path, ncu_id, &tcu_id, forzar),
     }
 }
 
@@ -63,24 +79,11 @@ pub fn ingestar_directorio(
     println!("Archivos CSV encontrados: {}", csv_files.len());
 
     let mut total_insertadas = 0;
+    let forzar = !skip_files_already_inserted;
 
     for csv_path in csv_files {
-        let nombre = csv_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or_default();
-
-        if skip_files_already_inserted {
-            let mut stmt = conn.prepare_cached(
-                "SELECT COUNT(*) FROM ingesta_log WHERE fichero = ? AND ncu_id = ?",
-            )?;
-            let ya_ingestado: i64 = stmt.query_row(params![nombre, ncu_id], |r| r.get(0))?;
-            if ya_ingestado > 0 {
-                continue;
-            }
-        }
-
-        let filas = ingestar_fichero(conn, &csv_path, ncu_id)?;
+        // el hash del fichero decide si se omite o se reingesta; forzar lo ignora
+        let filas = ingestar_fichero_interno(conn, &csv_path, ncu_id, forzar)?;
         total_insertadas += filas;
     }
 
@@ -93,12 +96,28 @@ pub fn ingestar_ncu(
     csv_path: impl AsRef<Path>,
     ncu_id: &str,
 ) -> Result<usize, DbError> {
+    ingestar_ncu_interno(conn, csv_path, ncu_id, false)
+}
+
+fn ingestar_ncu_interno(
+    conn: &mut Connection,
+    csv_path: impl AsRef<Path>,
+    ncu_id: &str,
+    forzar: bool,
+) -> Result<usize, DbError> {
     let path = csv_path.as_ref();
     let filename = path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default()
         .to_string();
+
+    let hash_fichero = calcular_hash_fichero(path)?;
+    if !forzar
+        && obtener_ultimo_hash(conn, ncu_id, &filename, "datos_ncu")?.as_deref() == Some(hash_fichero.as_str())
+    {
+        return Ok(0);
+    }
 
     let disp_id = obtener_o_crear_dispositivo(conn, ncu_id, "NCU", ncu_id)?;
     let records = read_ncu_csv(path)?;
@@ -149,6 +168,7 @@ pub fn ingestar_ncu(
         ya_existentes,
         ts_inicio,
         ts_fin,
+        &hash_fichero,
     )?;
 
     Ok(records.len())
@@ -162,6 +182,7 @@ fn ingestar_sensor_interno(
     tipo: &str,
     device_id: &str,
     tabla: &str,
+    forzar: bool,
 ) -> Result<usize, DbError> {
     let path = csv_path.as_ref();
     let filename = path
@@ -169,6 +190,13 @@ fn ingestar_sensor_interno(
         .and_then(|n| n.to_str())
         .unwrap_or_default()
         .to_string();
+
+    let hash_fichero = calcular_hash_fichero(path)?;
+    if !forzar
+        && obtener_ultimo_hash(conn, ncu_id, &filename, tabla)?.as_deref() == Some(hash_fichero.as_str())
+    {
+        return Ok(0);
+    }
 
     let disp_id = obtener_o_crear_dispositivo(conn, ncu_id, tipo, device_id)?;
     let records = read_sensor_csv(path)?;
@@ -226,6 +254,7 @@ fn ingestar_sensor_interno(
         ya_existentes,
         ts_inicio,
         ts_fin,
+        &hash_fichero,
     )?;
 
     Ok(records.len())
@@ -238,7 +267,17 @@ pub fn ingestar_hsu(
     ncu_id: &str,
     hsu_id: &str,
 ) -> Result<usize, DbError> {
-    ingestar_sensor_interno(conn, csv_path, ncu_id, "HSU", hsu_id, "datos_hsu")
+    ingestar_hsu_interno(conn, csv_path, ncu_id, hsu_id, false)
+}
+
+fn ingestar_hsu_interno(
+    conn: &mut Connection,
+    csv_path: impl AsRef<Path>,
+    ncu_id: &str,
+    hsu_id: &str,
+    forzar: bool,
+) -> Result<usize, DbError> {
+    ingestar_sensor_interno(conn, csv_path, ncu_id, "HSU", hsu_id, "datos_hsu", forzar)
 }
 
 /// Ingesta un fichero NCU_SENSORS.
@@ -247,7 +286,16 @@ pub fn ingestar_ncu_sensor(
     csv_path: impl AsRef<Path>,
     ncu_id: &str,
 ) -> Result<usize, DbError> {
-    ingestar_sensor_interno(conn, csv_path, ncu_id, "NCU", ncu_id, "datos_ncu_sensor")
+    ingestar_ncu_sensor_interno(conn, csv_path, ncu_id, false)
+}
+
+fn ingestar_ncu_sensor_interno(
+    conn: &mut Connection,
+    csv_path: impl AsRef<Path>,
+    ncu_id: &str,
+    forzar: bool,
+) -> Result<usize, DbError> {
+    ingestar_sensor_interno(conn, csv_path, ncu_id, "NCU", ncu_id, "datos_ncu_sensor", forzar)
 }
 
 /// Ingesta un fichero TCU.
@@ -257,12 +305,29 @@ pub fn ingestar_tcu(
     ncu_id: &str,
     tcu_id: &str,
 ) -> Result<usize, DbError> {
+    ingestar_tcu_interno(conn, csv_path, ncu_id, tcu_id, false)
+}
+
+fn ingestar_tcu_interno(
+    conn: &mut Connection,
+    csv_path: impl AsRef<Path>,
+    ncu_id: &str,
+    tcu_id: &str,
+    forzar: bool,
+) -> Result<usize, DbError> {
     let path = csv_path.as_ref();
     let filename = path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default()
         .to_string();
+
+    let hash_fichero = calcular_hash_fichero(path)?;
+    if !forzar
+        && obtener_ultimo_hash(conn, ncu_id, &filename, "datos_tcu")?.as_deref() == Some(hash_fichero.as_str())
+    {
+        return Ok(0);
+    }
 
     let disp_id = obtener_o_crear_dispositivo(conn, ncu_id, "TCU", tcu_id)?;
     let records = read_tcu_csv(path)?;
@@ -336,6 +401,7 @@ pub fn ingestar_tcu(
         ya_existentes,
         ts_inicio,
         ts_fin,
+        &hash_fichero,
     )?;
 
     Ok(records.len())
@@ -347,12 +413,28 @@ pub fn ingestar_event_log(
     csv_path: impl AsRef<Path>,
     ncu_id: &str,
 ) -> Result<usize, DbError> {
+    ingestar_event_log_interno(conn, csv_path, ncu_id, false)
+}
+
+fn ingestar_event_log_interno(
+    conn: &mut Connection,
+    csv_path: impl AsRef<Path>,
+    ncu_id: &str,
+    forzar: bool,
+) -> Result<usize, DbError> {
     let path = csv_path.as_ref();
     let filename = path
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default()
         .to_string();
+
+    let hash_fichero = calcular_hash_fichero(path)?;
+    if !forzar
+        && obtener_ultimo_hash(conn, ncu_id, &filename, "ncu_event_log")?.as_deref() == Some(hash_fichero.as_str())
+    {
+        return Ok(0);
+    }
 
     let disp_id = obtener_o_crear_dispositivo(conn, ncu_id, "NCU", ncu_id)?;
     let records = read_event_log_csv(path)?;
@@ -394,6 +476,7 @@ pub fn ingestar_event_log(
         ya_existentes,
         ts_inicio,
         ts_fin,
+        &hash_fichero,
     )?;
 
     Ok(records.len())

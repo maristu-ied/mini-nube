@@ -8,7 +8,7 @@ def main(db_path: str) -> None:
     conn = conectar(db_path)
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;")
         tablas = cursor.fetchall()
         print("Resumen de la base de datos:")
         for tabla in tablas:
